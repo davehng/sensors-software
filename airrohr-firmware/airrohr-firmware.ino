@@ -95,8 +95,10 @@ String SOFTWARE_VERSION(SOFTWARE_VERSION_STR);
 #endif
 
 // includes common to ESP8266 and ESP32 (especially external libraries)
-#include "./oledfont.h"				// avoids including the default Arial font, needs to be included before SSD1306.h
+//#include "./oledfont.h"				// avoids including the default Arial font, needs to be included before SSD1306.h
+#if defined(SSD1306)  // comment out code for SSD1306 as i have a library conflict and i don't have this display
 #include <SSD1306.h>
+#endif
 #include <SH1106.h>
 #include <LiquidCrystal_I2C.h>
 #define ARDUINOJSON_ENABLE_ARDUINO_STREAM 0
@@ -267,7 +269,9 @@ float last_value_dnms_la_max = -1.0;
 /*****************************************************************
  * Display definitions                                           *
  *****************************************************************/
+#if defined(SSD1306)
 SSD1306*  oled_ssd1306 = nullptr;
+#endif
 SH1106* oled_sh1106 = nullptr;
 LiquidCrystal_I2C* lcd_1602 = nullptr;
 LiquidCrystal_I2C* lcd_2004 = nullptr;
@@ -510,8 +514,9 @@ const char JSON_SENSOR_DATA_VALUES[] PROGMEM = "sensordatavalues";
 /*****************************************************************
  * display values                                                *
  *****************************************************************/
-static void display_debug(const String& text1, const String& text2) {
+void display_debug(const String& text1, const String& text2) {
 	debug_outln_info(F("output debug text to displays..."));
+#if defined(SSD1306)
 	if (oled_ssd1306) {
 		oled_ssd1306->clear();
 		oled_ssd1306->displayOn();
@@ -520,6 +525,7 @@ static void display_debug(const String& text1, const String& text2) {
 		oled_ssd1306->drawString(0, 24, text2);
 		oled_ssd1306->display();
 	}
+#endif
 	if (oled_sh1106) {
 		oled_sh1106->clear();
 		oled_sh1106->displayOn();
@@ -547,7 +553,7 @@ static void display_debug(const String& text1, const String& text2) {
 /*****************************************************************
  * read SDS011 sensor serial and firmware date                   *
  *****************************************************************/
-static String SDS_version_date() {
+String SDS_version_date() {
 
 	if (cfg::sds_read && !last_value_SDS_version.length()) {
 		debug_outln_verbose(FPSTR(DBG_TXT_START_READING), FPSTR(DBG_TXT_SDS011_VERSION_DATE));
@@ -581,7 +587,7 @@ static String SDS_version_date() {
 /*****************************************************************
  * disable unneeded NMEA sentences, TinyGPS++ needs GGA, RMC     *
  *****************************************************************/
-static void disable_unneeded_nmea() {
+void disable_unneeded_nmea() {
 	serialGPS->println(F("$PUBX,40,GLL,0,0,0,0*5C"));       // Geographic position, latitude / longitude
 //	serialGPS->println(F("$PUBX,40,GGA,0,0,0,0*5A"));       // Global Positioning System Fix Data
 	serialGPS->println(F("$PUBX,40,GSA,0,0,0,0*4E"));       // GPS DOP and active satellites
@@ -596,7 +602,7 @@ static void disable_unneeded_nmea() {
  *****************************************************************/
 
 /* backward compatibility for the times when we stored booleans as strings */
-static bool boolFromJSON(const DynamicJsonDocument& json, const __FlashStringHelper* key)
+bool boolFromJSON(const DynamicJsonDocument& json, const __FlashStringHelper* key)
 {
 	if (json[key].is<char*>()) {
 		return !strcmp_P(json[key].as<char*>(), PSTR("true"));
@@ -604,7 +610,7 @@ static bool boolFromJSON(const DynamicJsonDocument& json, const __FlashStringHel
 	return json[key].as<bool>();
 }
 
-static void readConfig(bool oldconfig = false) {
+void readConfig(bool oldconfig = false) {
 	bool rewriteConfig = false;
 
 	String cfgName(F("/config.json"));
@@ -699,7 +705,7 @@ static void readConfig(bool oldconfig = false) {
 	}
 }
 
-static void init_config() {
+void init_config() {
 
 	debug_outln_info(F("mounting FS..."));
 
@@ -724,7 +730,7 @@ static void init_config() {
 /*****************************************************************
  * write config to spiffs                                        *
  *****************************************************************/
-static bool writeConfig() {
+bool writeConfig() {
 	DynamicJsonDocument json(JSON_BUFFER_SIZE);
 	debug_outln_info(F("Saving config..."));
 	json["SOFTWARE_VERSION"] = SOFTWARE_VERSION;
@@ -771,7 +777,7 @@ static bool writeConfig() {
 /*****************************************************************
  * Prepare information for data Loggers                          *
  *****************************************************************/
-static void createLoggerConfigs() {
+void createLoggerConfigs() {
 #if defined(ESP8266)
 	auto new_session = []() { return new BearSSL::Session; };
 #else
@@ -807,7 +813,7 @@ static void createLoggerConfigs() {
  * html helper functions                                         *
  *****************************************************************/
 
-static void start_html_page(String& page_content, const String& title) {
+void start_html_page(String& page_content, const String& title) {
 	last_page_load = millis();
 
 	RESERVE_STRING(s, LARGE_STR);
@@ -831,14 +837,14 @@ static void start_html_page(String& page_content, const String& title) {
 	page_content += s;
 }
 
-static void end_html_page(String& page_content) {
+void end_html_page(String& page_content) {
 	if (page_content.length()) {
 		server.sendContent(page_content);
 	}
 	server.sendContent_P(WEB_PAGE_FOOTER);
 }
 
-static void add_form_input(String& page_content, const ConfigShapeId cfgid, const __FlashStringHelper* info, const int length) {
+void add_form_input(String& page_content, const ConfigShapeId cfgid, const __FlashStringHelper* info, const int length) {
 	RESERVE_STRING(s, MED_STR);
 	s = F("<tr>"
 			"<td title='[&lt;= {l}]'>{i}:&nbsp;</td>"
@@ -874,7 +880,7 @@ static void add_form_input(String& page_content, const ConfigShapeId cfgid, cons
 	page_content += s;
 }
 
-static String form_checkbox(const ConfigShapeId cfgid, const String& info, const bool linebreak) {
+String form_checkbox(const ConfigShapeId cfgid, const String& info, const bool linebreak) {
 	RESERVE_STRING(s, MED_STR);
 	s = F("<label for='{n}'>"
 	"<input type='checkbox' name='{n}' value='1' id='{n}' {c}/>"
@@ -893,7 +899,7 @@ static String form_checkbox(const ConfigShapeId cfgid, const String& info, const
 	return s;
 }
 
-static String form_submit(const String& value) {
+String form_submit(const String& value) {
 	String s = F(	"<tr>"
 					"<td>&nbsp;</td>"
 					"<td>"
@@ -904,7 +910,7 @@ static String form_submit(const String& value) {
 	return s;
 }
 
-static String form_select_lang() {
+String form_select_lang() {
 	String s_select = F(" selected='selected'");
 	String s = F(	"<tr>"
 					"<td>" INTL_LANGUAGE ":&nbsp;</td>"
@@ -937,7 +943,7 @@ static String form_select_lang() {
 	return s;
 }
 
-static void add_warning_first_cycle(String& page_content) {
+void add_warning_first_cycle(String& page_content) {
 	String s = FPSTR(INTL_TIME_TO_FIRST_MEASUREMENT);
 	unsigned int time_to_first = cfg::sending_intervall_ms - msSince(starttime);
 	if (time_to_first > cfg::sending_intervall_ms) {
@@ -947,7 +953,7 @@ static void add_warning_first_cycle(String& page_content) {
 	page_content += s;
 }
 
-static void add_age_last_values(String& s) {
+void add_age_last_values(String& s) {
 	s += "<b>";
 	unsigned int time_since_last = msSince(starttime);
 	if (time_since_last > cfg::sending_intervall_ms) {
@@ -963,7 +969,7 @@ static void add_age_last_values(String& s) {
  *
  * -Provide BasicAuth for all page contexts except /values and images
  *****************************************************************/
-static bool webserver_request_auth() {
+bool webserver_request_auth() {
 	if (cfg::www_basicauth_enabled && ! wificonfig_loop) {
 		debug_outln_info(F("validate request auth..."));
 		if (!server.authenticate(cfg::www_username, cfg::www_password)) {
@@ -974,7 +980,7 @@ static bool webserver_request_auth() {
 	return true;
 }
 
-static void sendHttpRedirect() {
+void sendHttpRedirect() {
 	server.sendHeader(F("Location"), F("http://192.168.4.1/config"));
 	server.send(302, FPSTR(TXT_CONTENT_TYPE_TEXT_HTML), emptyString);
 }
@@ -982,7 +988,7 @@ static void sendHttpRedirect() {
 /*****************************************************************
  * Webserver root: show all options                              *
  *****************************************************************/
-static void webserver_root() {
+void webserver_root() {
 	if (WiFi.status() != WL_CONNECTED) {
 		sendHttpRedirect();
 	} else {
@@ -1008,7 +1014,7 @@ static void webserver_root() {
  * Webserver config: show config page                            *
  *****************************************************************/
 
-static void webserver_config_send_body_get(String& page_content) {
+void webserver_config_send_body_get(String& page_content) {
 	auto add_form_checkbox = [&page_content](const ConfigShapeId cfgid, const String& info) {
 		page_content += form_checkbox(cfgid, info, true);
 	};
@@ -1216,7 +1222,7 @@ static void webserver_config_send_body_get(String& page_content) {
 	page_content = emptyString;
 }
 
-static void webserver_config_send_body_post(String& page_content) {
+void webserver_config_send_body_post(String& page_content) {
 	String masked_pwd;
 
 	for (unsigned e = 0; e < sizeof(configShape)/sizeof(configShape[0]); ++e) {
@@ -1256,7 +1262,7 @@ static void webserver_config_send_body_post(String& page_content) {
 	page_content = emptyString;
 }
 
-static void webserver_config() {
+void webserver_config() {
 	if (!webserver_request_auth())
 	{ return; }
 
@@ -1291,7 +1297,7 @@ static void webserver_config() {
 	}
 }
 
-static void sensor_restart() {
+void sensor_restart() {
 #if defined(ESP8266)
 		WiFi.disconnect();
 		WiFi.mode(WIFI_OFF);
@@ -1316,7 +1322,7 @@ static void sensor_restart() {
 /*****************************************************************
  * Webserver wifi: show available wifi networks                  *
  *****************************************************************/
-static void webserver_wifi() {
+void webserver_wifi() {
 	String page_content;
 
 	debug_outln_info(F("wifi networks found: "), String(count_wifiInfo));
@@ -1381,7 +1387,7 @@ static void webserver_wifi() {
 /*****************************************************************
  * Webserver root: show latest values                            *
  *****************************************************************/
-static void webserver_values() {
+void webserver_values() {
 	if (WiFi.status() != WL_CONNECTED) {
 		sendHttpRedirect();
 		return;
@@ -1533,7 +1539,7 @@ static void webserver_values() {
 /*****************************************************************
  * Webserver root: show device status
  *****************************************************************/
-static void webserver_status() {
+void webserver_status() {
 	if (WiFi.status() != WL_CONNECTED) {
 		sendHttpRedirect();
 		return;
@@ -1644,7 +1650,7 @@ static void webserver_status() {
  * Webserver read serial ring buffer                             *
  *****************************************************************/
 
-static void webserver_serial() {
+void webserver_serial() {
 	String s(Debug.popLines());
 
 	server.send(s.length() ? 200 : 204, FPSTR(TXT_CONTENT_TYPE_TEXT_PLAIN), s);
@@ -1653,7 +1659,7 @@ static void webserver_serial() {
 /*****************************************************************
  * Webserver set debug level                                     *
  *****************************************************************/
-static void webserver_debug_level() {
+void webserver_debug_level() {
 	if (!webserver_request_auth())
 	{ return; }
 
@@ -1724,7 +1730,7 @@ static void webserver_debug_level() {
 /*****************************************************************
  * Webserver remove config                                       *
  *****************************************************************/
-static void webserver_removeConfig() {
+void webserver_removeConfig() {
 	if (!webserver_request_auth())
 	{ return; }
 
@@ -1758,7 +1764,7 @@ static void webserver_removeConfig() {
 /*****************************************************************
  * Webserver reset NodeMCU                                       *
  *****************************************************************/
-static void webserver_reset() {
+void webserver_reset() {
 	if (!webserver_request_auth())
 	{ return; }
 
@@ -1779,7 +1785,7 @@ static void webserver_reset() {
 /*****************************************************************
  * Webserver data.json                                           *
  *****************************************************************/
-static void webserver_data_json() {
+void webserver_data_json() {
 	String s1;
 	unsigned long age = 0;
 
@@ -1809,7 +1815,7 @@ static void webserver_data_json() {
 /*****************************************************************
  * Webserver metrics endpoint                                    *
  *****************************************************************/
-static void webserver_metrics_endpoint() {
+void webserver_metrics_endpoint() {
 	debug_outln_info(F("ws: /metrics"));
 	RESERVE_STRING(page_content, XLARGE_STR);
 	page_content = F("software_version{version=\"" SOFTWARE_VERSION_STR "\",$i} 1\nuptime_ms{$i} $u\nsending_intervall_ms{$i} $s\nnumber_of_measurements{$i} $c\n");
@@ -1848,14 +1854,14 @@ static void webserver_metrics_endpoint() {
  * Webserver Images                                              *
  *****************************************************************/
 
-static void webserver_favicon() {
+void webserver_favicon() {
 	server.sendHeader(F("Cache-Control"), F("max-age=2592000, public"));
 
 	server.send_P(200, TXT_CONTENT_TYPE_IMAGE_PNG,
 		LUFTDATEN_INFO_LOGO_PNG, LUFTDATEN_INFO_LOGO_PNG_SIZE);
 }
 
-static void webserver_static() {
+void webserver_static() {
 	server.sendHeader(F("Cache-Control"), F("max-age=2592000, public"));
 
 	if (server.arg(String('r')) == F("logo")) {
@@ -1873,7 +1879,7 @@ static void webserver_static() {
 /*****************************************************************
  * Webserver page not found                                      *
  *****************************************************************/
-static void webserver_not_found() {
+void webserver_not_found() {
 	last_page_load = millis();
 	debug_outln_info(F("ws: not found ..."));
 	if (WiFi.status() != WL_CONNECTED) {
@@ -1890,7 +1896,7 @@ static void webserver_not_found() {
 /*****************************************************************
  * Webserver setup                                               *
  *****************************************************************/
-static void setup_webserver() {
+void setup_webserver() {
 	server.on("/", webserver_root);
 	server.on(F("/config"), webserver_config);
 	server.on(F("/wifi"), webserver_wifi);
@@ -1912,7 +1918,7 @@ static void setup_webserver() {
 	server.begin();
 }
 
-static int selectChannelForAp() {
+int selectChannelForAp() {
 	std::array<int, 14> channels_rssi;
 	std::fill(channels_rssi.begin(), channels_rssi.end(), -100);
 
@@ -1934,7 +1940,7 @@ static int selectChannelForAp() {
 /*****************************************************************
  * WifiConfig                                                    *
  *****************************************************************/
-static void wifiConfig() {
+void wifiConfig() {
 	debug_outln_info(F("Starting WiFiManager"));
 	debug_outln_info(F("AP ID: "), String(cfg::fs_ssid));
 	debug_outln_info(F("Password: "), String(cfg::fs_pwd));
@@ -2033,7 +2039,7 @@ static void wifiConfig() {
 	wificonfig_loop = false;
 }
 
-static void waitForWifiToConnect(int maxRetries) {
+void waitForWifiToConnect(int maxRetries) {
 	int retryCount = 0;
 	while ((WiFi.status() != WL_CONNECTED) && (retryCount < maxRetries)) {
 		delay(500);
@@ -2046,9 +2052,9 @@ static void waitForWifiToConnect(int maxRetries) {
  * WiFi auto connecting script                                   *
  *****************************************************************/
 
-static WiFiEventHandler disconnectEventHandler;
+WiFiEventHandler disconnectEventHandler;
 
-static void connectWifi() {
+void connectWifi() {
 	display_debug(F("Connecting to"), String(cfg::wlanssid));
 #if defined(ESP8266)
 	// Enforce Rx/Tx calibration
@@ -2123,7 +2129,7 @@ static void connectWifi() {
 }
 
 
-static WiFiClient* getNewLoggerWiFiClient(const LoggerEntry logger) {
+WiFiClient* getNewLoggerWiFiClient(const LoggerEntry logger) {
 
 	WiFiClient* _client;
 	if (loggerConfigs[logger].session) {
@@ -2151,7 +2157,7 @@ static WiFiClient* getNewLoggerWiFiClient(const LoggerEntry logger) {
 /*****************************************************************
  * send data to rest api                                         *
  *****************************************************************/
-static unsigned long sendData(const LoggerEntry logger, const String& data, const int pin, const char* host, const char* url) {
+unsigned long sendData(const LoggerEntry logger, const String& data, const int pin, const char* host, const char* url) {
 
 	unsigned long start_send = millis();
 	const __FlashStringHelper* contentType;
@@ -2218,7 +2224,7 @@ static unsigned long sendData(const LoggerEntry logger, const String& data, cons
 /*****************************************************************
  * send single sensor data to sensor.community api                *
  *****************************************************************/
-static unsigned long sendSensorCommunity(const String& data, const int pin, const __FlashStringHelper* sensorname, const char* replace_str) {
+unsigned long sendSensorCommunity(const String& data, const int pin, const __FlashStringHelper* sensorname, const char* replace_str) {
 	unsigned long sum_send_time = 0;
 
 	if (cfg::send2dusti && data.length()) {
@@ -2244,7 +2250,7 @@ static unsigned long sendSensorCommunity(const String& data, const int pin, cons
 /*****************************************************************
  * send data to influxdb                                         *
  *****************************************************************/
-static void create_influxdb_string_from_data(String& data_4_influxdb, const String& data) {
+void create_influxdb_string_from_data(String& data_4_influxdb, const String& data) {
 	debug_outln_verbose(F("Parse JSON for influx DB: "), data);
 	DynamicJsonDocument json2data(JSON_BUFFER_SIZE);
 	DeserializationError err = deserializeJson(json2data, data);
@@ -2280,7 +2286,7 @@ static void create_influxdb_string_from_data(String& data_4_influxdb, const Stri
 /*****************************************************************
  * send data as csv to serial out                                *
  *****************************************************************/
-static void send_csv(const String& data) {
+void send_csv(const String& data) {
 	DynamicJsonDocument json2data(JSON_BUFFER_SIZE);
 	DeserializationError err = deserializeJson(json2data, data);
 	debug_outln_info(F("CSV Output: "), data);
@@ -2314,7 +2320,7 @@ static void send_csv(const String& data) {
 /*****************************************************************
  * read DHT22 sensor values                                      *
  *****************************************************************/
-static void fetchSensorDHT(String& s) {
+void fetchSensorDHT(String& s) {
 	debug_outln_verbose(FPSTR(DBG_TXT_START_READING), FPSTR(SENSORS_DHT22));
 
 	// Check if valid number if non NaN (not a number) will be send.
@@ -2349,7 +2355,7 @@ static void fetchSensorDHT(String& s) {
 /*****************************************************************
  * read HTU21D sensor values                                     *
  *****************************************************************/
-static void fetchSensorHTU21D(String& s) {
+void fetchSensorHTU21D(String& s) {
 	debug_outln_verbose(FPSTR(DBG_TXT_START_READING), FPSTR(SENSORS_HTU21D));
 
 	const auto t = htu21d.readTemperature();
@@ -2372,7 +2378,7 @@ static void fetchSensorHTU21D(String& s) {
 /*****************************************************************
  * read BMP180 sensor values                                     *
  *****************************************************************/
-static void fetchSensorBMP(String& s) {
+void fetchSensorBMP(String& s) {
 	debug_outln_verbose(FPSTR(DBG_TXT_START_READING), FPSTR(SENSORS_BMP180));
 
 	const auto p = bmp.readPressure();
@@ -2394,7 +2400,7 @@ static void fetchSensorBMP(String& s) {
 /*****************************************************************
  * read SHT3x sensor values                                      *
  *****************************************************************/
-static void fetchSensorSHT3x(String& s) {
+void fetchSensorSHT3x(String& s) {
 	debug_outln_verbose(FPSTR(DBG_TXT_START_READING), FPSTR(SENSORS_SHT3X));
 
 	const auto t = sht3x.readTemperature();
@@ -2416,7 +2422,7 @@ static void fetchSensorSHT3x(String& s) {
 /*****************************************************************
  * read BMP280/BME280 sensor values                              *
  *****************************************************************/
-static void fetchSensorBMX280(String& s) {
+void fetchSensorBMX280(String& s) {
 	const char* const sensor_name = (bmx280.sensorID() == BME280_SENSOR_ID) ? SENSORS_BME280 : SENSORS_BMP280;
 	debug_outln_verbose(FPSTR(DBG_TXT_START_READING), FPSTR(sensor_name));
 
@@ -2449,7 +2455,7 @@ static void fetchSensorBMX280(String& s) {
 /*****************************************************************
  * read DS18B20 sensor values                                    *
  *****************************************************************/
-static void fetchSensorDS18B20(String& s) {
+void fetchSensorDS18B20(String& s) {
 	float t;
 	debug_outln_verbose(FPSTR(DBG_TXT_START_READING), FPSTR(SENSORS_DS18B20));
 
@@ -2479,7 +2485,7 @@ static void fetchSensorDS18B20(String& s) {
 /*****************************************************************
  * read SDS011 sensor values                                     *
  *****************************************************************/
-static void fetchSensorSDS(String& s) {
+void fetchSensorSDS(String& s) {
 	if (cfg::sending_intervall_ms > (WARMUPTIME_SDS_MS + READINGTIME_SDS_MS) &&
 		msSince(starttime) < (cfg::sending_intervall_ms - (WARMUPTIME_SDS_MS + READINGTIME_SDS_MS))) {
 		if (is_SDS_running) {
@@ -2561,7 +2567,7 @@ static void fetchSensorSDS(String& s) {
 /*****************************************************************
  * read Plantronic PM sensor sensor values                       *
  *****************************************************************/
-static __noinline void fetchSensorPMS(String& s) {
+__noinline void fetchSensorPMS(String& s) {
 	char buffer;
 	int value;
 	int len = 0;
@@ -2715,7 +2721,7 @@ static __noinline void fetchSensorPMS(String& s) {
 /*****************************************************************
  * read Honeywell PM sensor sensor values                        *
  *****************************************************************/
-static __noinline void fetchSensorHPM(String& s) {
+__noinline void fetchSensorHPM(String& s) {
 	char buffer;
 	int value;
 	int len = 0;
@@ -2837,7 +2843,7 @@ static __noinline void fetchSensorHPM(String& s) {
 /*****************************************************************
  * read Tera Sensor Next PM sensor sensor values                 *
  *****************************************************************/
-static void fetchSensorNPM(String& s) {
+void fetchSensorNPM(String& s) {
 
 	debug_outln_verbose(FPSTR(DBG_TXT_START_READING), FPSTR(SENSORS_NPM));
 
@@ -3129,7 +3135,7 @@ static void fetchSensorNPM(String& s) {
 /*****************************************************************
  * read PPD42NS sensor values                                    *
  *****************************************************************/
-static __noinline void fetchSensorPPD(String& s) {
+__noinline void fetchSensorPPD(String& s) {
 	debug_outln_verbose(FPSTR(DBG_TXT_START_READING), FPSTR(SENSORS_PPD42NS));
 
 	if (msSince(starttime) <= SAMPLETIME_MS) {
@@ -3196,7 +3202,7 @@ static __noinline void fetchSensorPPD(String& s) {
 /*****************************************************************
    read SPS30 PM sensor values
  *****************************************************************/
-static void fetchSensorSPS30(String& s) {
+void fetchSensorSPS30(String& s) {
 	debug_outln_verbose(FPSTR(DBG_TXT_START_READING), FPSTR(SENSORS_SPS30));
 
 	last_value_SPS30_P0 = value_SPS30_P0 / SPS30_measurement_count;
@@ -3238,7 +3244,7 @@ static void fetchSensorSPS30(String& s) {
 /*****************************************************************
    read DNMS values
  *****************************************************************/
-static void fetchSensorDNMS(String& s) {
+void fetchSensorDNMS(String& s) {
 	static bool dnms_error = false;
 	debug_outln_verbose(FPSTR(DBG_TXT_START_READING), FPSTR(SENSORS_DNMS));
 	last_value_dnms_laeq = -1.0;
@@ -3286,7 +3292,7 @@ static void fetchSensorDNMS(String& s) {
 /*****************************************************************
  * read GPS sensor values                                        *
  *****************************************************************/
-static __noinline void fetchSensorGPS(String& s) {
+__noinline void fetchSensorGPS(String& s) {
 	debug_outln_verbose(FPSTR(DBG_TXT_START_READING), "GPS");
 
 	if (gps.location.isUpdated()) {
@@ -3345,7 +3351,7 @@ static __noinline void fetchSensorGPS(String& s) {
  * OTAUpdate                                                     *
  *****************************************************************/
 
-static bool fwDownloadStream(WiFiClientSecure& client, const String& url, Stream* ostream) {
+bool fwDownloadStream(WiFiClientSecure& client, const String& url, Stream* ostream) {
 
 	HTTPClient http;
 	int bytes_written = -1;
@@ -3389,7 +3395,7 @@ static bool fwDownloadStream(WiFiClientSecure& client, const String& url, Stream
 	return false;
 }
 
-static bool fwDownloadStreamFile(WiFiClientSecure& client, const String& url, const String& fname) {
+bool fwDownloadStreamFile(WiFiClientSecure& client, const String& url, const String& fname) {
 
 	String fname_new(fname);
 	fname_new += F(".new");
@@ -3416,7 +3422,7 @@ static bool fwDownloadStreamFile(WiFiClientSecure& client, const String& url, co
 	return false;
 }
 
-static void twoStageOTAUpdate() {
+void twoStageOTAUpdate() {
 
 	if (!cfg::auto_update) return;
 
@@ -3521,7 +3527,7 @@ static void twoStageOTAUpdate() {
 #endif
 }
 
-static String displayGenerateFooter(unsigned int screen_count) {
+String displayGenerateFooter(unsigned int screen_count) {
 	String display_footer;
 	for (unsigned int i = 0; i < screen_count; ++i) {
 		display_footer += (i != (next_display_count % screen_count)) ? " . " : " o ";
@@ -3532,7 +3538,7 @@ static String displayGenerateFooter(unsigned int screen_count) {
 /*****************************************************************
  * display values                                                *
  *****************************************************************/
-static void display_values() {
+void display_values() {
 	float t_value = -128.0;
 	float h_value = -1.0;
 	float p_value = -1.0;
@@ -3733,7 +3739,7 @@ static void display_values() {
 			display_lines[2] = F("Measurements: "); display_lines[2] += String(count_sends);
 			break;
 		}
-
+#if defined(SSD1306)
 		if (oled_ssd1306) {
 			oled_ssd1306->clear();
 			oled_ssd1306->displayOn();
@@ -3747,6 +3753,7 @@ static void display_values() {
 			oled_ssd1306->drawString(64, 52, displayGenerateFooter(screen_count));
 			oled_ssd1306->display();
 		}
+#endif
 		if (oled_sh1106) {
 			oled_sh1106->clear();
 			oled_sh1106->displayOn();
@@ -3837,7 +3844,8 @@ static void display_values() {
 /*****************************************************************
  * Init LCD/OLED display                                         *
  *****************************************************************/
-static void init_display() {
+void init_display() {
+#if defined(SSD1306)
 	if (cfg::has_display) {
 		oled_ssd1306 = new SSD1306(0x3c, I2C_PIN_SDA, I2C_PIN_SCL);
 		oled_ssd1306->init();
@@ -3845,6 +3853,8 @@ static void init_display() {
 			oled_ssd1306->flipScreenVertically();
 		}
 	}
+#endif
+ 
 	if (cfg::has_sh1106) {
 		oled_sh1106 = new SH1106(0x3c, I2C_PIN_SDA, I2C_PIN_SCL);
 		oled_sh1106->init();
@@ -3881,7 +3891,7 @@ static void init_display() {
 /*****************************************************************
  * Init BMP280/BME280                                            *
  *****************************************************************/
-static bool initBMX280(char addr) {
+bool initBMX280(char addr) {
 	debug_out(String(F("Trying BMx280 sensor on ")) + String(addr, HEX), DEBUG_MIN_INFO);
 
 	if (bmx280.begin(addr)) {
@@ -3901,7 +3911,7 @@ static bool initBMX280(char addr) {
 /*****************************************************************
    Init SPS30 PM Sensor
  *****************************************************************/
-static void initSPS30() {
+void initSPS30() {
 	char serial[SPS_MAX_SERIAL_LEN];
 	debug_out(F("Trying SPS30 sensor on 0x69H "), DEBUG_MIN_INFO);
 	sps30_reset();
@@ -3930,7 +3940,7 @@ static void initSPS30() {
 /*****************************************************************
    Init DNMS - Digital Noise Measurement Sensor
  *****************************************************************/
-static void initDNMS() {
+void initDNMS() {
 	char dnms_version[DNMS_MAX_VERSION_LEN + 1];
 
 	debug_out(F("Trying DNMS sensor on 0x55H "), DEBUG_MIN_INFO);
@@ -3946,7 +3956,7 @@ static void initDNMS() {
 	}
 }
 
-static void powerOnTestSensors() {
+void powerOnTestSensors() {
 	if (cfg::ppd_read) {
 		pinMode(PPD_PIN_PM1, INPUT_PULLUP);					// Listen at the designated PIN
 		pinMode(PPD_PIN_PM2, INPUT_PULLUP);					// Listen at the designated PIN
@@ -4093,7 +4103,7 @@ static void powerOnTestSensors() {
 
 }
 
-static void logEnabledAPIs() {
+void logEnabledAPIs() {
 	debug_outln_info(F("Send to :"));
 	if (cfg::send2dusti) {
 		debug_outln_info(F("sensor.community"));
@@ -4128,7 +4138,7 @@ static void logEnabledAPIs() {
 	}
 }
 
-static void logEnabledDisplays() {
+void logEnabledDisplays() {
 	if (cfg::has_display || cfg::has_sh1106) {
 		debug_outln_info(F("Show on OLED..."));
 	}
@@ -4140,7 +4150,7 @@ static void logEnabledDisplays() {
 	}
 }
 
-static void setupNetworkTime() {
+void setupNetworkTime() {
 	// server name ptrs must be persisted after the call to configTime because internally
 	// the pointers are stored see implementation of lwip sntp_setservername()
 	static char ntpServer1[18], ntpServer2[18];
@@ -4149,7 +4159,7 @@ static void setupNetworkTime() {
 		if (!sntp_time_set) {
 			time_t now = time(nullptr);
 			debug_outln_info(F("SNTP synced: "), ctime(&now));
-			twoStageOTAUpdate();
+			//twoStageOTAUpdate();
 			last_update_attempt = millis();
 		}
 		sntp_time_set++;
@@ -4160,7 +4170,7 @@ static void setupNetworkTime() {
 	configTime(0, 0, ntpServer1, ntpServer2);
 }
 
-static unsigned long sendDataToOptionalApis(const String &data) {
+unsigned long sendDataToOptionalApis(const String &data) {
 	unsigned long sum_send_time = 0;
 
 	if (cfg::send2madavi) {
@@ -4536,7 +4546,7 @@ void loop(void) {
 
 		// time for a OTA attempt?
 		if (msSince(last_update_attempt) > PAUSE_BETWEEN_UPDATE_ATTEMPTS_MS) {
-			twoStageOTAUpdate();
+			// twoStageOTAUpdate();
 			last_update_attempt = act_milli;
 		}
 
